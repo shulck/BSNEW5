@@ -5,14 +5,6 @@
 //  Created by Oleksandr Kuziakin on 04.04.2025.
 //
 
-
-//
-//  InviteUsersQRView.swift
-//  BandSync
-//
-//  Created by Claude AI on 04.04.2025.
-//
-
 import SwiftUI
 import CoreImage.CIFilterBuiltins
 
@@ -49,6 +41,59 @@ struct InviteUsersQRView: View {
                                 .background(Color.white)
                                 .cornerRadius(10)
                                 .shadow(radius: 5)
+                        } else {
+                            ProgressView()
+                                .frame(width: 200, height: 200)
+                        }
+                        
+                        if let code = groupService.group?.code {
+                            Text("Код: \(code)")
+                                .font(.system(.title3, design: .monospaced))
+                                .bold()
+                            
+                            Button(action: {
+                                UIPasteboard.general.string = code
+                                alertMessage = "Код скопирован в буфер обмена"
+                                showAlert = true
+                            }) {
+                                Label("Копировать код", systemImage: "doc.on.doc")
+                                    .padding()
+                                    .background(Color.blue.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(12)
+                    
+                    Divider()
+                    
+                    // Секция приглашения по email
+                    VStack(spacing: 15) {
+                        Text("Пригласить по Email")
+                            .font(.headline)
+                        
+                        TextField("Email пользователя", text: $inviteEmail)
+                            .autocapitalization(.none)
+                            .keyboardType(.emailAddress)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .padding(.horizontal)
+                        
+                        Button("Отправить приглашение") {
+                            sendInvite()
+                        }
+                        .disabled(inviteEmail.isEmpty || isLoading)
+                        .padding()
+                        .background(inviteEmail.isEmpty ? Color.gray.opacity(0.3) : Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                        
+                        if !message.isEmpty {
+                            Text(message)
+                                .foregroundColor(message.contains("Ошибка") ? .red : .green)
+                                .multilineTextAlignment(.center)
+                                .padding()
                         }
                     }
                     .padding()
@@ -197,57 +242,4 @@ struct InviteUsersQRView: View {
             rootViewController.present(activityVC, animated: true)
         }
     }
-} else {
-                            ProgressView()
-                                .frame(width: 200, height: 200)
-                        }
-                        
-                        if let code = groupService.group?.code {
-                            Text("Код: \(code)")
-                                .font(.system(.title3, design: .monospaced))
-                                .bold()
-                            
-                            Button(action: {
-                                UIPasteboard.general.string = code
-                                alertMessage = "Код скопирован в буфер обмена"
-                                showAlert = true
-                            }) {
-                                Label("Копировать код", systemImage: "doc.on.doc")
-                                    .padding()
-                                    .background(Color.blue.opacity(0.1))
-                                    .cornerRadius(8)
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(12)
-                    
-                    Divider()
-                    
-                    // Секция приглашения по email
-                    VStack(spacing: 15) {
-                        Text("Пригласить по Email")
-                            .font(.headline)
-                        
-                        TextField("Email пользователя", text: $inviteEmail)
-                            .autocapitalization(.none)
-                            .keyboardType(.emailAddress)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .padding(.horizontal)
-                        
-                        Button("Отправить приглашение") {
-                            sendInvite()
-                        }
-                        .disabled(inviteEmail.isEmpty || isLoading)
-                        .padding()
-                        .background(inviteEmail.isEmpty ? Color.gray.opacity(0.3) : Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                        
-                        if !message.isEmpty {
-                            Text(message)
-                                .foregroundColor(message.contains("Ошибка") ? .red : .green)
-                                .multilineTextAlignment(.center)
-                                .padding()
-                        }
+}

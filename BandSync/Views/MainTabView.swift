@@ -54,7 +54,7 @@ struct MainTabView: View {
                 .tag(4)
         }
         .onAppear {
-            appState.loadUser()
+            appState.refreshAuthState()
             
             // If the current tab is unavailable, switch to the first available one
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

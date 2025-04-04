@@ -1,12 +1,88 @@
 //
-//  AppState+Group.swift
+//  AppState.swift
 //  BandSync
 //
 //  Created by Claude AI on 04.04.2025.
 //
 
 import Foundation
+import FirebaseAuth
 import Combine
+
+final class AppState: ObservableObject {
+    static let shared = AppState()
+    
+    @Published var isLoggedIn = false
+    @Published var user: UserModel?
+    @Published var isLoading = false
+    
+    private var cancellables = Set<AnyCancellable>()
+    
+    private init() {
+        refreshAuthState()
+        
+        // Подписка на события аутентификации Firebase
+        Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            self?.refreshAuthState()
+        }
+    }
+    
+    // Обновление состояния аутентификации
+    func refreshAuthState() {
+        isLoading = true
+        
+        if AuthService.shared.isUserLoggedIn(), let uid = AuthService.shared.currentUserUID() {
+            // Получение пользователя из Firestore
+            UserService.shared.fetchUser(uid: uid) { [weak self] result in
+                DispatchQueue.main.async {
+                    self?.isLoading = false
+                    
+                    switch result {
+                    case .success(let user):
+                        self?.user = user
+                        self?.isLoggedIn = true
+                    case .failure:
+                        self?.user = nil
+                        self?.isLoggedIn = false
+                    }
+                }
+            }
+        } else {
+            isLoading = false
+            user = nil
+            isLoggedIn = false
+        }
+    }
+    
+    // Выход из системы
+    func logout() {
+        isLoading = true
+        AuthService.shared.signOut { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                switch result {
+                case .success:
+                    self?.user = nil
+                    self?.isLoggedIn = false
+                case .failure:
+                    // Логирование ошибки если нужно
+                    break
+                }
+            }
+        }
+    }
+    
+    // Проверка, имеет ли пользователь права редактирования для модуля
+    func hasEditPermission(for moduleId: ModuleType) -> Bool {
+        guard let role = user?.role else {
+            return false
+        }
+        
+        // Только админы и менеджеры могут редактировать
+        return role == .admin || role == .manager
+    }
+}
 
 // Расширение AppState с методами для работы с группами
 extension AppState {

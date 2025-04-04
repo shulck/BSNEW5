@@ -1,5 +1,5 @@
 //
-//  UserService+Group.swift
+//  UserService.swift
 //  BandSync
 //
 //  Created by Claude AI on 04.04.2025.
@@ -9,20 +9,77 @@ import Foundation
 import FirebaseFirestore
 import FirebaseAuth
 
-// Расширение существующего UserService для добавления функциональности,
-// связанной с группами
-extension UserService {
+final class UserService: ObservableObject {
+    static let shared = UserService()
+    
+    @Published var currentUser: UserModel?
+    
+    let db = Firestore.firestore()
+    
+    private init() {}
+    
+    // Получение пользователя по ID
+    func fetchUser(uid: String, completion: @escaping (Result<UserModel, Error>) -> Void) {
+        db.collection("users").document(uid).getDocument { snapshot, error in
+            if let error = error {
+                print("UserService: ошибка получения пользователя: \(error.localizedDescription)")
+                completion(.failure(error))
+                return
+            }
+            
+            if let document = snapshot, document.exists {
+                do {
+                    let user = try document.data(as: UserModel.self)
+                    self.currentUser = user
+                    completion(.success(user))
+                } catch {
+                    print("UserService: ошибка декодирования пользователя: \(error.localizedDescription)")
+                    completion(.failure(error))
+                }
+            } else {
+                let error = NSError(domain: "UserService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Пользователь не найден"])
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    // Обновление ID группы пользователя
+    func updateUserGroup(groupId: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            let error = NSError(domain: "UserService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Не найден текущий пользователь"])
+            completion(.failure(error))
+            return
+        }
+        
+        db.collection("users").document(uid).updateData([
+            "groupId": groupId
+        ]) { error in
+            if let error = error {
+                completion(.failure(error))
+            } else {
+                // Обновление локальных данных
+                if let user = self.currentUser {
+                    // Создаем новый экземпляр с обновленным groupId
+                    let updatedUser = UserModel(
+                        id: user.id,
+                        email: user.email,
+                        name: user.name,
+                        phone: user.phone,
+                        groupId: groupId,
+                        role: user.role
+                    )
+                    self.currentUser = updatedUser
+                }
+                completion(.success(()))
+            }
+        }
+    }
     
     // Очистить groupId у пользователя при выходе из группы
     func clearUserGroup(completion: @escaping (Result<Void, Error>) -> Void) {
-        print("UserService: очистка groupId у пользователя")
-        
-        // Убедимся, что Firebase инициализирован
-        FirebaseManager.shared.ensureInitialized()
-        
         guard let uid = Auth.auth().currentUser?.uid else {
-            print("UserService: нет текущего пользователя для очистки groupId")
-            completion(.failure(NSError(domain: "UserService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Пользователь не найден"])))
+            let error = NSError(domain: "UserService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Пользователь не найден"])
+            completion(.failure(error))
             return
         }
         
@@ -30,28 +87,29 @@ extension UserService {
             "groupId": NSNull()
         ]) { error in
             if let error = error {
-                print("UserService: ошибка при очистке groupId: \(error.localizedDescription)")
                 completion(.failure(error))
             } else {
-                print("UserService: groupId успешно очищен")
-                
                 // Обновляем локальные данные
-                DispatchQueue.main.async {
-                    if var user = self.currentUser {
-                        user.groupId = nil
-                        self.currentUser = user
-                    }
-                    
-                    completion(.success(()))
+                if let user = self.currentUser {
+                    // Создаем новый экземпляр с очищенным groupId
+                    let updatedUser = UserModel(
+                        id: user.id,
+                        email: user.email,
+                        name: user.name,
+                        phone: user.phone,
+                        groupId: nil,
+                        role: user.role
+                    )
+                    self.currentUser = updatedUser
                 }
+                
+                completion(.success(()))
             }
         }
     }
     
     // Получить список пользователей по массиву идентификаторов
     func fetchUsers(ids: [String], completion: @escaping ([UserModel]) -> Void) {
-        print("UserService: запрос данных пользователей по списку ID")
-        
         guard !ids.isEmpty else {
             completion([])
             return
@@ -87,7 +145,6 @@ extension UserService {
         }
         
         dispatchGroup.notify(queue: .main) {
-            print("UserService: получено \(result.count) пользователей из \(ids.count) запрошенных")
             completion(result)
         }
     }
@@ -142,13 +199,17 @@ extension UserService {
                 print("UserService: роль успешно обновлена")
                 
                 // Если обновляем текущего пользователя, то обновляем и локальные данные
-                if userId == self.currentUser?.id {
-                    DispatchQueue.main.async {
-                        if var user = self.currentUser {
-                            user.role = role
-                            self.currentUser = user
-                        }
-                    }
+                if userId == self.currentUser?.id, let user = self.currentUser {
+                    // Создаем новый экземпляр с обновленной ролью
+                    let updatedUser = UserModel(
+                        id: user.id,
+                        email: user.email,
+                        name: user.name,
+                        phone: user.phone,
+                        groupId: user.groupId,
+                        role: role
+                    )
+                    self.currentUser = updatedUser
                 }
                 
                 completion(.success(()))

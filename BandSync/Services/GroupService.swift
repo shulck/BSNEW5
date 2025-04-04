@@ -200,8 +200,12 @@ final class GroupService: ObservableObject {
     }
 
     // Удаление пользователя из группы
-    func removeUser(userId: String) {
-        guard let groupId = group?.id else { return }
+    func removeUser(userId: String, completion: ((Bool) -> Void)? = nil) {
+        guard let groupId = group?.id else {
+            completion?(false)
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         successMessage = nil
@@ -214,6 +218,7 @@ final class GroupService: ObservableObject {
             DispatchQueue.main.async {
                 self.isLoading = false
                 self.errorMessage = "Невозможно удалить единственного администратора группы"
+                completion?(false)
             }
             return
         }
@@ -241,6 +246,7 @@ final class GroupService: ObservableObject {
                 
                 if let error = error {
                     self?.errorMessage = "Ошибка удаления пользователя: \(error.localizedDescription)"
+                    completion?(false)
                 } else {
                     self?.successMessage = "Пользователь удален из группы"
                     
@@ -248,14 +254,20 @@ final class GroupService: ObservableObject {
                     if let memberIndex = self?.groupMembers.firstIndex(where: { $0.id == userId }) {
                         self?.groupMembers.remove(at: memberIndex)
                     }
+                    
+                    completion?(true)
                 }
             }
         }
     }
 
     // Обновление названия группы
-    func updateGroupName(_ newName: String) {
-        guard let groupId = group?.id, !newName.isEmpty else { return }
+    func updateGroupName(_ newName: String, completion: ((Bool) -> Void)? = nil) {
+        guard let groupId = group?.id, !newName.isEmpty else {
+            completion?(false)
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         successMessage = nil
@@ -268,11 +280,13 @@ final class GroupService: ObservableObject {
                 
                 if let error = error {
                     self?.errorMessage = "Ошибка обновления названия: \(error.localizedDescription)"
+                    completion?(false)
                 } else {
                     self?.successMessage = "Название группы обновлено"
                     
                     // Обновление локальных данных
                     self?.group?.name = newName
+                    completion?(true)
                 }
             }
         }
@@ -515,6 +529,46 @@ final class GroupService: ObservableObject {
     // Проверка, является ли пользователь участником группы
     func isUserMember(userId: String) -> Bool {
         return group?.members.contains(userId) == true
+    }
+    
+    // Метод для приглашения пользователя по электронной почте
+    func inviteUserByEmail(email: String, to groupId: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        // Найти пользователя по email
+        UserService.shared.findUserByEmail(email) { [weak self] result in
+            switch result {
+            case .success(let user):
+                if let user = user {
+                    // Пользователь найден, добавляем его в список ожидающих подтверждения
+                    let batch = self?.db.batch()
+                    
+                    // Обновление группы
+                    let groupRef = self?.db.collection("groups").document(groupId)
+                    batch?.updateData([
+                        "pendingMembers": FieldValue.arrayUnion([user.id])
+                    ], forDocument: groupRef!)
+                    
+                    // Обновление пользователя
+                    let userRef = self?.db.collection("users").document(user.id)
+                    batch?.updateData([
+                        "groupId": groupId
+                    ], forDocument: userRef!)
+                    
+                    batch?.commit { error in
+                        if let error = error {
+                            completion(.failure(error))
+                        } else {
+                            completion(.success(()))
+                        }
+                    }
+                } else {
+                    // Пользователь не найден
+                    let error = NSError(domain: "UserNotFound", code: -1, userInfo: [NSLocalizedDescriptionKey: "Пользователь с таким email не найден"])
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
     }
 }
 
