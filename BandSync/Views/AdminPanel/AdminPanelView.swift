@@ -3,7 +3,7 @@
 //  BandSync
 //
 //  Created by Oleksandr Kuziakin on 31.03.2025.
-//  Updated by Claude AI on 31.03.2025.
+//  Updated by Claude AI on 04.04.2025.
 //
 
 import SwiftUI
@@ -16,42 +16,52 @@ struct AdminPanelView: View {
     var body: some View {
         NavigationView {
             List {
-                Section(header: Text("Group management")) {
-                    // Group settings
+                Section(header: Text("Управление группой")) {
+                    // Добавляем ссылку на полный обзор группы
+                    NavigationLink(destination: GroupDetailView()) {
+                        Label("Информация о группе", systemImage: "music.mic")
+                    }
+                    
+                    // Группа и статистика
+                    NavigationLink(destination: GroupActivityView()) {
+                        Label("Активность группы", systemImage: "chart.bar")
+                    }
+                    
+                    // Настройки группы
                     NavigationLink(destination: GroupSettingsView()) {
-                        Label("Group settings", systemImage: "gearshape")
+                        Label("Настройки группы", systemImage: "gearshape")
                     }
                     
-                    // Member management
+                    // Управление участниками
                     NavigationLink(destination: UsersListView()) {
-                        Label("Group members", systemImage: "person.3")
+                        Label("Участники группы", systemImage: "person.3")
                     }
                     
-                    // Permission management
+                    // Управление правами доступа
                     NavigationLink(destination: PermissionsView()) {
-                        Label("Permissions", systemImage: "lock.shield")
+                        Label("Права доступа", systemImage: "lock.shield")
                     }
                     
-                    // Module management
+                    // Управление модулями
                     NavigationLink(destination: ModuleManagementView()) {
-                        Label("App modules", systemImage: "square.grid.2x2")
+                        Label("Модули приложения", systemImage: "square.grid.2x2")
                     }
                 }
                 
-                Section(header: Text("Statistics")) {
-                    // App usage statistics
-                    Label("Number of members: \(groupService.groupMembers.count)", systemImage: "person.2")
+                Section(header: Text("Статистика")) {
+                    // Число участников
+                    Label("Число участников: \(groupService.groupMembers.count)", systemImage: "person.2")
                     
                     if let group = groupService.group {
-                        Label("Group name: \(group.name)", systemImage: "music.mic")
+                        Label("Название группы: \(group.name)", systemImage: "music.mic")
                         
-                        // Invitation code with copy option
+                        // Код приглашения с возможностью копирования
                         HStack {
-                            Label("Invitation code: \(group.code)", systemImage: "qrcode")
+                            Label("Код приглашения: \(group.code)", systemImage: "qrcode")
                             Spacer()
                             Button {
                                 UIPasteboard.general.string = group.code
-                                alertMessage = "Code copied to clipboard"
+                                alertMessage = "Код скопирован в буфер обмена"
                                 showAlert = true
                             } label: {
                                 Image(systemName: "doc.on.doc")
@@ -61,25 +71,24 @@ struct AdminPanelView: View {
                     }
                 }
                 
-                Section(header: Text("Additional")) {
+                Section(header: Text("Дополнительно")) {
                     Button(action: {
-                        // Function for testing notifications
-                        alertMessage = "Notifications will be implemented in the next update"
+                        // Функция для тестирования уведомлений
+                        alertMessage = "Уведомления будут реализованы в следующем обновлении"
                         showAlert = true
                     }) {
-                        Label("Test notifications", systemImage: "bell")
+                        Label("Тестировать уведомления", systemImage: "bell")
                     }
                     
                     Button(action: {
-                        // Data export function
-                        alertMessage = "Data export will be implemented in the next update"
-                        showAlert = true
+                        // Функция экспорта данных группы
+                        exportGroupData()
                     }) {
-                        Label("Export group data", systemImage: "square.and.arrow.up")
+                        Label("Экспорт данных группы", systemImage: "square.and.arrow.up")
                     }
                 }
             }
-            .navigationTitle("Admin panel")
+            .navigationTitle("Панель администратора")
             .onAppear {
                 if let groupId = AppState.shared.user?.groupId {
                     groupService.fetchGroup(by: groupId)
@@ -87,7 +96,7 @@ struct AdminPanelView: View {
             }
             .alert(isPresented: $showAlert) {
                 Alert(
-                    title: Text("Information"),
+                    title: Text("Информация"),
                     message: Text(alertMessage),
                     dismissButton: .default(Text("OK"))
                 )
@@ -98,5 +107,19 @@ struct AdminPanelView: View {
                 }
             }
         }
+    }
+    
+    // Функция экспорта данных группы
+    private func exportGroupData() {
+        guard let groupId = AppState.shared.user?.groupId else {
+            alertMessage = "Не удалось определить группу"
+            showAlert = true
+            return
+        }
+        
+        // Здесь можно реализовать экспорт данных группы в CSV или другой формат
+        // В данном примере просто показываем сообщение
+        alertMessage = "Экспорт данных группы будет реализован в следующем обновлении"
+        showAlert = true
     }
 }

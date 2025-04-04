@@ -1,144 +1,149 @@
 //
-//  AppState.swift
+//  AppState+Group.swift
 //  BandSync
 //
-//  Created by Oleksandr Kuziakin on 31.03.2025.
+//  Created by Claude AI on 04.04.2025.
 //
 
 import Foundation
 import Combine
-import FirebaseAuth
 
-final class AppState: ObservableObject {
-    static let shared = AppState()
-
-    @Published var isLoggedIn: Bool = false // Changed to false for security
-    @Published var user: UserModel?
-    @Published var isLoading: Bool = false
-    @Published var errorMessage: String?
-
-    private var cancellables = Set<AnyCancellable>()
-
-    private init() {
-        print("AppState: initialization")
-        
-        // Make sure Firebase is initialized
-        FirebaseManager.shared.ensureInitialized()
-        
-        print("AppState: checking authorization state")
-        isLoggedIn = AuthService.shared.isUserLoggedIn()
-        print("AppState: isLoggedIn set to \(isLoggedIn)")
-        
-        print("AppState: setting up subscription to currentUser")
-        UserService.shared.$currentUser
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] user in
-                print("AppState: received user update: \(user != nil ? "user exists" : "user doesn't exist")")
-                self?.user = user
-                
-                // When user changes, load permissions
-                if let groupId = user?.groupId {
-                    print("AppState: user has groupId: \(groupId), loading permissions")
-                    PermissionService.shared.fetchPermissions(for: groupId)
-                } else {
-                    print("AppState: user has no groupId")
-                }
-            }
-            .store(in: &cancellables)
-        print("AppState: initialization completed")
-    }
-
-    func logout() {
-        print("AppState: starting logout")
-        isLoading = true
-        
-        AuthService.shared.signOut { [weak self] result in
-            guard let self = self else { return }
-            
-            DispatchQueue.main.async {
-                self.isLoading = false
-                
-                switch result {
-                case .success:
-                    print("AppState: logout successful")
-                    self.isLoggedIn = false
-                    self.user = nil
-                case .failure(let error):
-                    print("AppState: error during logout: \(error.localizedDescription)")
-                    self.errorMessage = "Error during logout: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-
-    func loadUser() {
-        print("AppState: starting user loading")
-        isLoading = true
-        
-        UserService.shared.fetchCurrentUser { [weak self] success in
-            guard let self = self else {
-                print("AppState: self = nil during user loading")
-                return
-            }
-            
-            DispatchQueue.main.async {
-                print("AppState: user loading completed, success: \(success)")
-                self.isLoggedIn = success
-                self.isLoading = false
-                
-                if !success {
-                    self.errorMessage = "Failed to load user data"
-                    print("AppState: failed to load user data")
-                }
-            }
-        }
-    }
-
-    func refreshAuthState() {
-        print("AppState: refreshing authorization state")
-        isLoading = true
-        
-        // Make sure Firebase is initialized
-        FirebaseManager.shared.ensureInitialized()
-        
-        print("AppState: checking current user")
-        if Auth.auth().currentUser != nil {
-            print("AppState: user is authorized, loading data")
-            loadUser()
-        } else {
-            print("AppState: user is not authorized")
-            DispatchQueue.main.async {
-                self.isLoggedIn = false
-                self.user = nil
-                self.isLoading = false
-            }
-        }
+// Расширение AppState с методами для работы с группами
+extension AppState {
+    
+    // Проверка, является ли пользователь администратором группы
+    var isGroupAdmin: Bool {
+        user?.role == .admin
     }
     
-    // Check access to module for current user
-    func hasAccess(to moduleType: ModuleType) -> Bool {
-        print("AppState: checking access to module \(moduleType.rawValue)")
-        guard isLoggedIn, let userRole = user?.role else {
-            print("AppState: access to module \(moduleType.rawValue) denied - not authorized or no role")
+    // Проверка, имеет ли пользователь права менеджера группы
+    var isGroupManager: Bool {
+        user?.role == .admin || user?.role == .manager
+    }
+    
+    // Проверка, имеет ли пользователь доступ к модулю
+    func canAccessModule(_ moduleType: ModuleType) -> Bool {
+        // Проверяем наличие доступа через PermissionService
+        return PermissionService.shared.currentUserHasAccess(to: moduleType)
+    }
+    
+    // Проверка, может ли пользователь создавать события
+    func canCreateEvents() -> Bool {
+        // Администраторы и менеджеры всегда могут
+        if isGroupManager {
+            return true
+        }
+        
+        // Проверка настроек группы, разрешают ли они обычным участникам создавать события
+        if let settings = GroupService.shared.group?.settings {
+            return settings.allowMembersToCreateEvents
+        }
+        
+        // По умолчанию запрещаем
+        return false
+    }
+    
+    // Проверка, может ли пользователь создавать сетлисты
+    func canCreateSetlists() -> Bool {
+        // Администраторы и менеджеры всегда могут
+        if isGroupManager {
+            return true
+        }
+        
+        // Проверка настроек группы, разрешают ли они обычным участникам создавать сетлисты
+        if let settings = GroupService.shared.group?.settings {
+            return settings.allowMembersToCreateSetlists
+        }
+        
+        // По умолчанию запрещаем
+        return false
+    }
+    
+    // Проверка, может ли пользователь приглашать других участников
+    func canInviteMembers() -> Bool {
+        // Администраторы и менеджеры всегда могут
+        if isGroupManager {
+            return true
+        }
+        
+        // Проверка настроек группы, разрешают ли они обычным участникам приглашать
+        if let settings = GroupService.shared.group?.settings {
+            return settings.allowMembersToInvite
+        }
+        
+        // По умолчанию запрещаем
+        return false
+    }
+    
+    // Проверка, находится ли пользователь в группе
+    var isInGroup: Bool {
+        user?.groupId != nil
+    }
+    
+    // Проверка, ожидает ли пользователь подтверждения присоединения к группе
+    var isPendingGroupApproval: Bool {
+        guard let groupId = user?.groupId,
+              let userId = user?.id else {
             return false
         }
         
-        let hasAccess = PermissionService.shared.hasAccess(to: moduleType, role: userRole)
-        print("AppState: access to module \(moduleType.rawValue) \(hasAccess ? "allowed" : "denied")")
-        return hasAccess
+        // Проверяем, находится ли ID пользователя в списке pendingMembers группы
+        if let pendingMembers = GroupService.shared.group?.pendingMembers {
+            return pendingMembers.contains(userId)
+        }
+        
+        return false
     }
     
-    // Check if user has edit permissions in the module
-    func hasEditPermission(for moduleType: ModuleType) -> Bool {
-        print("AppState: checking edit permissions for module \(moduleType.rawValue)")
-        guard isLoggedIn, let userRole = user?.role else {
-            print("AppState: edit access for module \(moduleType.rawValue) denied - not authorized or no role")
+    // Проверка, является ли пользователь полноценным участником группы
+    var isActiveGroupMember: Bool {
+        guard let groupId = user?.groupId,
+              let userId = user?.id else {
             return false
         }
         
-        // Admins and managers have edit permissions
-        let hasPermission = userRole == .admin || userRole == .manager
-        print("AppState: edit access for module \(moduleType.rawValue) \(hasPermission ? "allowed" : "denied")")
-        return hasPermission
+        // Проверяем, находится ли ID пользователя в списке members группы
+        if let members = GroupService.shared.group?.members {
+            return members.contains(userId)
+        }
+        
+        return false
+    }
+    
+    // Покинуть текущую группу
+    func leaveCurrentGroup(completion: @escaping (Bool) -> Void) {
+        guard let userId = user?.id,
+              let groupId = user?.groupId else {
+            completion(false)
+            return
+        }
+        
+        isLoading = true
+        
+        // Используем GroupService для удаления пользователя из группы
+        GroupService.shared.removeUser(userId: userId) { [weak self] success in
+            if success {
+                // Если успешно удалили из группы, обновляем данные пользователя
+                UserService.shared.clearUserGroup { result in
+                    DispatchQueue.main.async {
+                        self?.isLoading = false
+                        
+                        switch result {
+                        case .success:
+                            // Обновляем состояние приложения
+                            self?.refreshAuthState()
+                            completion(true)
+                        case .failure:
+                            completion(false)
+                        }
+                    }
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self?.isLoading = false
+                    completion(false)
+                }
+            }
+        }
     }
 }
