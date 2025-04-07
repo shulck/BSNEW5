@@ -1,10 +1,3 @@
-//
-//  AuthService.swift
-//  BandSync
-//
-//  Created by Oleksandr Kuziakin on 31.03.2025.
-//
-
 import Foundation
 import FirebaseAuth
 import FirebaseFirestore
@@ -39,25 +32,29 @@ final class AuthService {
             
             print("AuthService: user created with UID: \(uid)")
 
-            let userData: [String: Any] = [
-                "id": uid,
-                "email": email,
-                "name": name,
-                "phone": phone,
-                "groupId": NSNull(),
-                "role": "Member"
-            ]
+            let user = UserModel(
+                id: uid,
+                email: email,
+                name: name,
+                phone: phone,
+                groupId: nil,
+                role: .member
+            )
             
-            print("AuthService: saving user data: \(userData)")
-
-            self?.db.collection("users").document(uid).setData(userData) { error in
-                if let error = error {
-                    print("AuthService: error saving user data: \(error.localizedDescription)")
-                    completion(.failure(error))
-                } else {
-                    print("AuthService: user data successfully saved")
-                    completion(.success(()))
+            // Сериализовать модель и сохранить
+            do {
+                try self?.db.collection("users").document(uid).setData(from: user) { error in
+                    if let error = error {
+                        print("AuthService: error saving user data: \(error.localizedDescription)")
+                        completion(.failure(error))
+                    } else {
+                        print("AuthService: user data successfully saved")
+                        completion(.success(()))
+                    }
                 }
+            } catch {
+                print("AuthService: error serializing user data: \(error.localizedDescription)")
+                completion(.failure(error))
             }
         }
     }
@@ -68,13 +65,29 @@ final class AuthService {
         // Make sure Firebase is initialized
         FirebaseManager.shared.ensureInitialized()
         
-        auth.signIn(withEmail: email, password: password) { _, error in
+        auth.signIn(withEmail: email, password: password) { [weak self] authResult, error in
             if let error = error {
                 print("AuthService: error logging in: \(error.localizedDescription)")
                 completion(.failure(error))
-            } else {
-                print("AuthService: user login successful")
-                completion(.success(()))
+                return
+            }
+            
+            guard let uid = authResult?.user.uid else {
+                print("AuthService: UID missing after login")
+                completion(.failure(NSError(domain: "UIDMissing", code: -1, userInfo: nil)))
+                return
+            }
+            
+            print("AuthService: user login successful")
+            
+            // После успешного входа проверяем существование пользователя
+            UserService.shared.ensureUserExists(uid: uid, email: email) { result in
+                switch result {
+                case .success(_):
+                    completion(.success(()))
+                case .failure(let error):
+                    completion(.failure(error))
+                }
             }
         }
     }

@@ -1,12 +1,17 @@
 import Foundation
+import FirebaseFirestore
 
 struct UserModel: Identifiable, Codable, Equatable {
-    let id: String
-    let email: String
-    let name: String
-    let phone: String
-    let groupId: String?
+    @DocumentID var id: String?
+    var email: String
+    var name: String
+    var phone: String
+    var groupId: String?
     var role: UserRole
+    
+    enum CodingKeys: String, CodingKey {
+        case id, email, name, phone, groupId, role
+    }
 
     enum UserRole: String, Codable, CaseIterable, Identifiable {
         case admin = "Admin"
@@ -17,7 +22,38 @@ struct UserModel: Identifiable, Codable, Equatable {
         var id: String { rawValue }
     }
     
-    // Implementation of Equatable
+    // Дополнительный инициализатор для совместимости
+    init(id: String = UUID().uuidString, email: String, name: String, phone: String, groupId: String?, role: UserRole) {
+        self.id = id
+        self.email = email
+        self.name = name
+        self.phone = phone
+        self.groupId = groupId
+        self.role = role
+    }
+    
+    // Декодирование с обработкой возможных несоответствий
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        email = try container.decode(String.self, forKey: .email)
+        name = try container.decode(String.self, forKey: .name)
+        phone = try container.decode(String.self, forKey: .phone)
+        
+        // Безопасное декодирование groupId, который может быть nil
+        groupId = try container.decodeIfPresent(String.self, forKey: .groupId)
+        
+        // Безопасное декодирование role с fallback на member
+        if let roleString = try? container.decode(String.self, forKey: .role),
+           let decodedRole = UserRole(rawValue: roleString) {
+            role = decodedRole
+        } else {
+            role = .member
+        }
+    }
+    
+    // Реализация Equatable
     static func == (lhs: UserModel, rhs: UserModel) -> Bool {
         return lhs.id == rhs.id &&
                lhs.email == rhs.email &&

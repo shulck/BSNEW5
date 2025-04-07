@@ -41,15 +41,19 @@ struct UsersListView: View {
                                 Spacer()
                                 
                                 // Action buttons
-                                if user.id != AppState.shared.user?.id {
+                                if let currentUserId = AppState.shared.user?.id, user.id != currentUserId {
                                     Menu {
                                         Button("Change role") {
-                                            selectedUserId = user.id
-                                            showingRoleView = true
+                                            if let userId = user.id {
+                                                selectedUserId = userId
+                                                showingRoleView = true
+                                            }
                                         }
                                         
                                         Button("Remove from group", role: .destructive) {
-                                            groupService.removeUser(userId: user.id)
+                                            if let userId = user.id {
+                                                groupService.removeUser(userId: userId)
+                                            }
                                         }
                                     } label: {
                                         Image(systemName: "ellipsis.circle")
@@ -76,18 +80,20 @@ struct UsersListView: View {
                                 Spacer()
                                 
                                 // Accept/reject buttons
-                                Button {
-                                    groupService.approveUser(userId: user.id)
-                                } label: {
-                                    Text("Accept")
-                                        .foregroundColor(.green)
-                                }
-                                
-                                Button {
-                                    groupService.rejectUser(userId: user.id)
-                                } label: {
-                                    Text("Decline")
-                                        .foregroundColor(.red)
+                                if let userId = user.id {
+                                    Button {
+                                        groupService.approveUser(userId: userId)
+                                    } label: {
+                                        Text("Accept")
+                                            .foregroundColor(.green)
+                                    }
+                                    
+                                    Button {
+                                        groupService.rejectUser(userId: userId)
+                                    } label: {
+                                        Text("Decline")
+                                            .foregroundColor(.red)
+                                    }
                                 }
                             }
                         }
